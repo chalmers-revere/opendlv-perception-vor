@@ -37,24 +37,35 @@ int32_t main(int32_t argc, char **argv) {
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
   if ( (0 == commandlineArguments.count("cid")) || (0 == commandlineArguments.count("width")) || (0 == commandlineArguments.count("height")) || (0 == commandlineArguments.count("bpp")) || (0 == commandlineArguments.count("haarfile")) ) {
     std::cerr << argv[0] << " accesses video data using shared memory and sends it as a stream over an OD4 session." << std::endl;
-    std::cerr << "         --verbose:        enable diagnostic output" << std::endl;
-    std::cerr << "         --croptop:        value for cropping image from top" << std::endl;
-    std::cerr << "         --croptophorizon: value for cropping image from top" << std::endl;
-    std::cerr << "         --cropbottom:     value for cropping image from bottom" << std::endl;
-    std::cerr << "         --width:          the width of the image inside the shared memory" << std::endl;
-    std::cerr << "         --height:         the height of the image inside the shared memory" << std::endl;
-    std::cerr << "         --widthscaled:    the width of the image used in image processing" << std::endl;
-    std::cerr << "         --heightscaled:   the height of the image used in image processing" << std::endl;
-    std::cerr << "         --bpp:            the bits per pixel of the image inside the shared memory" << std::endl;
-    std::cerr << "         --haarfile:       name of the file containing the haar classifier" << std::endl;
-    std::cerr << "         --shmin:          name of the shared memory to read from (as consumer) the input image" << std::endl;
-    std::cerr << "         --shmout:         name of the shared memory to write to (as producer) the output image" << std::endl;
-    std::cerr << "         --widthout:       the width of the image inside the shared output memory" << std::endl;
-    std::cerr << "         --heightout:      the height of the image inside the shared output memory" << std::endl;
+    std::cerr << "         --verbose:          enable diagnostic output" << std::endl;
+    std::cerr << "         --croptop:          value for cropping image from top" << std::endl;
+    std::cerr << "         --croptophorizon:   value for cropping image from top" << std::endl;
+    std::cerr << "         --cropbottom:       value for cropping image from bottom" << std::endl;
+    std::cerr << "         --width:            the width of the image inside the shared memory" << std::endl;
+    std::cerr << "         --height:           the height of the image inside the shared memory" << std::endl;
+    std::cerr << "         --widthscaled:      the width of the image used in image processing" << std::endl;
+    std::cerr << "         --heightscaled:     the height of the image used in image processing" << std::endl;
+    std::cerr << "         --bpp:              the bits per pixel of the image inside the shared memory" << std::endl;
+    std::cerr << "         --haarfile:         name of the file containing the haar classifier" << std::endl;
+    std::cerr << "         --shmin:            name of the shared memory to read from (as consumer) the input image" << std::endl;
+    std::cerr << "         --shmout:           name of the shared memory to write to (as producer) the output image" << std::endl;
+    std::cerr << "         --widthout:         the width of the image inside the shared output memory" << std::endl;
+    std::cerr << "         --heightout:        the height of the image inside the shared output memory" << std::endl;
+    std::cerr << "         --disablekiwi:      do not detect Kiwi" << std::endl;
+    std::cerr << "         --disablelane:      do not detect lanes" << std::endl;
+    std::cerr << "         --disablepurplebox: do not detect purple boxes" << std::endl;
+    std::cerr << "         --disablebluebox:   do not detect blue boxes" << std::endl;
+    std::cerr << "         --linethreshold:    Hough line detector threshold (default 70)" << std::endl;
     std::cerr << "Example: " << argv[0] << " --cid=111 --width=1280 --height=960 --bpp=24 --widthscaled=256 --heightscaled=192 --widthout=128 --heightout=96 --shmin=cam0 --shmout=output --haarfile=myHaarFile.xml --croptop=10 --cropbottom=20 --croptophorizon=50 --verbose" << std::endl;
     retCode = 1;
   } else {
     bool const VERBOSE{commandlineArguments.count("verbose") != 0};
+
+    bool const DISABLE_KIWI{commandlineArguments.count("disablekiwi") != 0};
+    bool const DISABLE_LANE{commandlineArguments.count("disablelane") != 0};
+    bool const DISABLE_PURPLE_BOX{commandlineArguments.count("disablepurplebox") != 0};
+    bool const DISABLE_BLUE_BOX{commandlineArguments.count("disablebluebox") != 0};
+    uint32_t const LINETHRESHOLD{(commandlineArguments["linethreshold"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["linethreshold"])) : 70};
 
     uint32_t const WIDTH{static_cast<uint32_t>(std::stoi(commandlineArguments["width"]))};
     uint32_t const HEIGHT{static_cast<uint32_t>(std::stoi(commandlineArguments["height"]))};
@@ -131,21 +142,24 @@ int32_t main(int32_t argc, char **argv) {
         // Note: originalScaledImage will here after be drawn at.
 
         // Detect Kiwis.
-        auto detections = kiwiDetector.detect(objectImage);
-        for (auto detection : detections) {
-          cv::Rect2d d = detection;
-          float angle = static_cast<float>(1.0 - (d.x + d.width / 2.0) / (WIDTH_SCALED / 2.0));
-          float distance = static_cast<float>((1.0 - (d.y + d.height) / HEIGHT_SCALED_CROPPED) / 0.2);
+        if (!DISABLE_KIWI)
+        {
+          auto detections = kiwiDetector.detect(objectImage);
+          for (auto detection : detections) {
+            cv::Rect2d d = detection;
+            float angle = static_cast<float>(1.0 - (d.x + d.width / 2.0) / (WIDTH_SCALED / 2.0));
+            float distance = static_cast<float>((1.0 - (d.y + d.height) / HEIGHT_SCALED_CROPPED) / 0.2);
 
-          cv::rectangle(originalScaledImage, cv::Point(detection.tl().x, detection.tl().y + CROP_TOP), cv::Point(detection.br().x, detection.br().y + CROP_TOP), cv::Scalar(0, 0, 150), 3, 8, 0);
+            cv::rectangle(originalScaledImage, cv::Point(detection.tl().x, detection.tl().y + CROP_TOP), cv::Point(detection.br().x, detection.br().y + CROP_TOP), cv::Scalar(0, 0, 150), 3, 8, 0);
 
-          opendlv::logic::sensation::Point kiwiDetection;
-          kiwiDetection.azimuthAngle(angle);
-          kiwiDetection.distance(distance);
-          od4.send(kiwiDetection, cluon::time::now(), KIWI_ID);
+            opendlv::logic::sensation::Point kiwiDetection;
+            kiwiDetection.azimuthAngle(angle);
+            kiwiDetection.distance(distance);
+            od4.send(kiwiDetection, cluon::time::now(), KIWI_ID);
 
-          if (VERBOSE) {
-            std::clog << argv[0] << ": Detected Kiwi at angle " << angle << " and distance " << distance << std::endl;
+            if (VERBOSE) {
+              std::clog << argv[0] << ": Detected Kiwi at angle " << angle << " and distance " << distance << std::endl;
+            }
           }
         }
 
@@ -158,6 +172,7 @@ int32_t main(int32_t argc, char **argv) {
             cv::Point(erosionSize, erosionSize));
 
         // Detect blue boxes.
+        if (!DISABLE_BLUE_BOX)
         {
           cv::Mat blueBoxes;
           cv::inRange(hsv, cv::Scalar(85, 140, 140), cv::Scalar(125, 255, 255), blueBoxes);
@@ -201,6 +216,7 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         // Detect purple boxes.
+        if (!DISABLE_PURPLE_BOX)
         {
           cv::Mat purpleBoxes;
           cv::inRange(hsv, cv::Scalar(115, 40, 160), cv::Scalar(155, 255, 255), purpleBoxes);
@@ -244,40 +260,43 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         // Detect lanes.
-        cv::Mat hsvLines;
-        cv::cvtColor(lineImage, hsvLines, CV_BGR2HSV);
-        
-        cv::Mat lanes;
-        cv::inRange(hsvLines, cv::Scalar(20, 70, 170), cv::Scalar(60, 255, 255), lanes);
+        if (!DISABLE_LANE)
+        {
+          cv::Mat hsvLines;
+          cv::cvtColor(lineImage, hsvLines, CV_BGR2HSV);
+          
+          cv::Mat lanes;
+          cv::inRange(hsvLines, cv::Scalar(20, 70, 170), cv::Scalar(60, 255, 255), lanes);
 
-        cv::Mat edges;
-        cv::Canny(lanes, edges, 50, 200, 3); 
+          cv::Mat edges;
+          cv::Canny(lanes, edges, 50, 200, 3); 
 
-        std::vector<cv::Vec2f> detectedLines;
-        cv::HoughLines(lanes, detectedLines, 1, 5.0 * 3.14/180.0, 50.0);
+          std::vector<cv::Vec2f> detectedLines;
+          cv::HoughLines(lanes, detectedLines, 1, 5.0 * 3.14/180.0, LINETHRESHOLD);
 
-        for (auto v : detectedLines) {
-          float rho = v[0];
-          float theta = v[1];
-          cv::Point pt1;
-          cv::Point pt2;
-          double a = cos(theta);
-          double b = sin(theta);
-          double x0 = a * rho;
-          double y0 = b * rho;
-          pt1.x = cvRound(x0 + 1000*(-b));
-          pt1.y = cvRound(y0 + 1000*(a)) + CROP_TOP_HORIZON;
-          pt2.x = cvRound(x0 - 1000*(-b));
-          pt2.y = cvRound(y0 - 1000*(a)) + CROP_TOP_HORIZON;
-          cv::line(originalScaledImage, pt1, pt2, cv::Scalar(0, 150, 150), 3, CV_AA);
+          for (auto v : detectedLines) {
+            float rho = v[0];
+            float theta = v[1];
+            cv::Point pt1;
+            cv::Point pt2;
+            double a = cos(theta);
+            double b = sin(theta);
+            double x0 = a * rho;
+            double y0 = b * rho;
+            pt1.x = cvRound(x0 + 1000*(-b));
+            pt1.y = cvRound(y0 + 1000*(a)) + CROP_TOP_HORIZON;
+            pt2.x = cvRound(x0 - 1000*(-b));
+            pt2.y = cvRound(y0 - 1000*(a)) + CROP_TOP_HORIZON;
+            cv::line(originalScaledImage, pt1, pt2, cv::Scalar(0, 150, 150), 3, CV_AA);
 
-          opendlv::logic::sensation::Point lineDetection;
-          lineDetection.azimuthAngle(theta);
-          lineDetection.distance(rho);
-          od4.send(lineDetection, cluon::time::now(), LANE_MARKING_ID);
-            
-          if (VERBOSE) {
-            std::clog << argv[0] << ": Detected lane marking at polar coordinates with angle " << theta << " and distance " << rho << std::endl;
+            opendlv::logic::sensation::Point lineDetection;
+            lineDetection.azimuthAngle(theta);
+            lineDetection.distance(rho);
+            od4.send(lineDetection, cluon::time::now(), LANE_MARKING_ID);
+              
+            if (VERBOSE) {
+              std::clog << argv[0] << ": Detected lane marking at polar coordinates with angle " << theta << " and distance " << rho << std::endl;
+            }
           }
         }
 
