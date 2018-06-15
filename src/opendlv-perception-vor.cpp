@@ -66,7 +66,7 @@ int32_t main(int32_t argc, char **argv) {
     
     uint32_t const CROP_TOP{(commandlineArguments["croptop"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["croptop"])) : 0};
     uint32_t const CROP_BOTTOM{(commandlineArguments["cropbottom"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["cropbottom"])) : 0};
-    uint32_t const CROP_TOP_HORIZON{(commandlineArguments["croptophorizon"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["croptophorizion"])) : 0};
+    uint32_t const CROP_TOP_HORIZON{(commandlineArguments["croptophorizon"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["croptophorizon"])) : 0};
 
     uint32_t const WIDTH_SCALED{(commandlineArguments["widthscaled"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["widthscaled"])) : WIDTH};
     uint32_t const HEIGHT_SCALED{(commandlineArguments["heightscaled"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["heightscaled"])) : HEIGHT};
