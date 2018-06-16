@@ -55,7 +55,6 @@ int32_t main(int32_t argc, char **argv) {
     std::cerr << "         --disablelane:      do not detect lanes" << std::endl;
     std::cerr << "         --disablepurplebox: do not detect purple boxes" << std::endl;
     std::cerr << "         --disablebluebox:   do not detect blue boxes" << std::endl;
-    std::cerr << "         --linethreshold:    Hough line detector threshold (default 70)" << std::endl;
     std::cerr << "Example: " << argv[0] << " --cid=111 --width=1280 --height=960 --bpp=24 --widthscaled=256 --heightscaled=192 --widthout=128 --heightout=96 --shmin=cam0 --shmout=output --haarfile=myHaarFile.xml --croptop=10 --cropbottom=20 --croptophorizon=50 --verbose" << std::endl;
     retCode = 1;
   } else {
@@ -65,7 +64,6 @@ int32_t main(int32_t argc, char **argv) {
     bool const DISABLE_LANE{commandlineArguments.count("disablelane") != 0};
     bool const DISABLE_PURPLE_BOX{commandlineArguments.count("disablepurplebox") != 0};
     bool const DISABLE_BLUE_BOX{commandlineArguments.count("disablebluebox") != 0};
-    uint32_t const LINETHRESHOLD{(commandlineArguments["linethreshold"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["linethreshold"])) : 70};
 
     uint32_t const WIDTH{static_cast<uint32_t>(std::stoi(commandlineArguments["width"]))};
     uint32_t const HEIGHT{static_cast<uint32_t>(std::stoi(commandlineArguments["height"]))};
@@ -265,39 +263,43 @@ int32_t main(int32_t argc, char **argv) {
           cv::Mat hsvLines;
           cv::cvtColor(lineImage, hsvLines, CV_BGR2HSV);
           
-          cv::Mat lanes;
-          cv::inRange(hsvLines, cv::Scalar(20, 70, 170), cv::Scalar(60, 255, 255), lanes);
+          cv::Mat lines;
+          cv::inRange(hsvLines, cv::Scalar(20, 70, 170), cv::Scalar(60, 255, 255), lines);
 
-          cv::Mat edges;
-          cv::Canny(lanes, edges, 50, 200, 3); 
+          cv::Mat linesMask;
+          cv::erode(lines, linesMask, element);
+          cv::dilate(linesMask, linesMask, element);
 
-          std::vector<cv::Vec2f> detectedLines;
-          cv::HoughLines(lanes, detectedLines, 1, 5.0 * 3.14/180.0, LINETHRESHOLD);
+          std::vector<std::vector<cv::Point>> contoursLines;
+          std::vector<cv::Vec4i> hierarchyLines;
+          
+          findContours(linesMask, contoursLines, hierarchyLines, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
+          
+          if (contoursLines.size() != 0) {
+            for (uint32_t i = 0; i < contoursLines.size(); i++) {
+              double area = contourArea(contoursLines[i], false);
 
-          for (auto v : detectedLines) {
-            float rho = v[0];
-            float theta = v[1];
-            cv::Point pt1;
-            cv::Point pt2;
-            double a = cos(theta);
-            double b = sin(theta);
-            double x0 = a * rho;
-            double y0 = b * rho;
-            pt1.x = cvRound(x0 + 1000*(-b));
-            pt1.y = cvRound(y0 + 1000*(a)) + CROP_TOP_HORIZON;
-            pt2.x = cvRound(x0 - 1000*(-b));
-            pt2.y = cvRound(y0 - 1000*(a)) + CROP_TOP_HORIZON;
-            cv::line(originalScaledImage, pt1, pt2, cv::Scalar(0, 150, 150), 3, CV_AA);
+              if (area > 20) {
+          
+                cv::Rect r = boundingRect(contoursLines[i]);
 
-            opendlv::logic::sensation::Point lineDetection;
-            lineDetection.azimuthAngle(theta);
-            lineDetection.distance(rho);
-            od4.send(lineDetection, cluon::time::now(), LANE_MARKING_ID);
+                if (r.width < static_cast<int32_t>(WIDTH_SCALED/5)){ 
+                  cv::rectangle(originalScaledImage, cv::Point(r.tl().x, r.tl().y + CROP_TOP_HORIZON), cv::Point(r.br().x, r.br().y + CROP_TOP_HORIZON), cv::Scalar(100, 0, 150), 3, 8, 0);
+                
+                  float angle = static_cast<float>(1.0 - (r.x + r.width / 2.0) / (WIDTH_SCALED / 2.0));
               
-            if (VERBOSE) {
-              std::clog << argv[0] << ": Detected lane marking at polar coordinates with angle " << theta << " and distance " << rho << std::endl;
+                  opendlv::logic::sensation::Point lineDetection;
+                  lineDetection.azimuthAngle(angle);
+                  od4.send(lineDetection, cluon::time::now(), LANE_MARKING_ID);
+              
+                  if (VERBOSE) {
+                    std::clog << argv[0] << ": Detected a lane marking at angle " << angle << std::endl;
+                  }
+                }
+              }
             }
           }
+
         }
 
         // Share the results.
